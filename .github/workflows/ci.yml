@@ -51,7 +51,7 @@ jobs:
 
       - name: Cypress
         working-directory: client
-        run: yarn cypress run
+        run: yarn cypress run --browser chrome
 
       - name: Save screenshots
         uses: actions/upload-artifact@v2
