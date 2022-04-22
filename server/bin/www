@@ -30,6 +30,8 @@ const server = http.createServer(app);
  */
 
 const io = require("socket.io")(server);
+onlineUsers.setIo(io);
+
 
 io.on("connection", (socket) => {
   socket.on("go-online", (id) => {
@@ -118,5 +120,3 @@ function onListening() {
 
   console.log("Listening on " + bind);
 }
-
-module.exports = { io };
