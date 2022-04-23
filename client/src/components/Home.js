@@ -19,6 +19,7 @@ const Home = ({ user, logout }) => {
 
   const socket = useContext(SocketContext);
 
+  const [unprocessedConvos, setUnprocessedConvos] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
 
@@ -156,23 +157,9 @@ const Home = ({ user, logout }) => {
     });
   }, [activeConversation, setAllToRead, processWasRead, user?.id]);;
 
-  /**
-   * Wrapper for setConversations that will update all read status state.
-   * This will mutate state, so only pass in state that has already been copied.
-   * @param {Array | Function} newCovosOrCallback The new conversations, or a callback
-   * that accepts the previous state and returns the new conversations.
-   */
-  const updateConversations = useCallback((newConvosOrCallback) => {
-    if(Array.isArray(newConvosOrCallback)) {
-      setConversations(wasReadHelper(newConvosOrCallback));
-    } else if(newConvosOrCallback && newConvosOrCallback.call) {
-      setConversations((prev) => wasReadHelper(newConvosOrCallback(prev)));
-    }
-  }, [setConversations, wasReadHelper]);
-
   const addNewConvo = useCallback(
     (recipientId, message) => {
-      updateConversations((prevConvos) =>
+      setUnprocessedConvos((prevConvos) =>
         prevConvos.map((convo) => {
           if (convo.otherUser.id === recipientId) {
             return {
@@ -186,7 +173,7 @@ const Home = ({ user, logout }) => {
         })
       );
     },
-    [updateConversations]
+    []
   );
 
   const addMessageToConversation = useCallback(
@@ -201,10 +188,10 @@ const Home = ({ user, logout }) => {
           messages: [message],
         };
         newConvo.latestMessage = message;
-        updateConversations((prev) => [newConvo, ...prev]);
+        setUnprocessedConvos((prev) => [newConvo, ...prev]);
       }
 
-      updateConversations((prevConvos) =>
+      setUnprocessedConvos((prevConvos) =>
         prevConvos.map((convo) => {
           if (convo.id === message.conversationId) {
             return {
@@ -217,7 +204,7 @@ const Home = ({ user, logout }) => {
         })
       );
     },
-    [updateConversations]
+    []
   );
 
   const setActiveChat = (username) => {
@@ -225,7 +212,7 @@ const Home = ({ user, logout }) => {
   };
 
   const addOnlineUser = useCallback((id) => {
-    updateConversations((prev) =>
+    setUnprocessedConvos((prev) =>
       prev.map((convo) => {
         if (convo.otherUser.id === id) {
           const convoCopy = { ...convo };
@@ -236,10 +223,10 @@ const Home = ({ user, logout }) => {
         }
       })
     );
-  }, [updateConversations]);
+  }, []);
 
   const removeOfflineUser = useCallback((id) => {
-    updateConversations((prev) =>
+    setUnprocessedConvos((prev) =>
       prev.map((convo) => {
         if (convo.otherUser.id === id) {
           const convoCopy = { ...convo };
@@ -250,11 +237,11 @@ const Home = ({ user, logout }) => {
         }
       })
     );
-  }, [updateConversations]);
+  }, []);
 
   const setWasReadLocally = useCallback(({ conversationId, messageId }) => {
     console.log('setWasReadLocally');
-    updateConversations(prev => prev.map(convo => {
+    setUnprocessedConvos(prev => prev.map(convo => {
       if (convo.id === conversationId) {
         const convoCopy = { ...convo };
         convoCopy.messages = convoCopy.messages.map(message => {
@@ -270,7 +257,7 @@ const Home = ({ user, logout }) => {
       }
       return convo;
     }));
-  }, [updateConversations]);
+  }, []);
 
   // Lifecycle
 
@@ -308,7 +295,7 @@ const Home = ({ user, logout }) => {
     const fetchConversations = async () => {
       try {
         const { data } = await axios.get('/api/conversations');
-        updateConversations(data);
+        setUnprocessedConvos(data);
       } catch (error) {
         console.error(error);
       }
@@ -320,10 +307,11 @@ const Home = ({ user, logout }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Update read status when the user switches conversations
+  // Update read status when the user switches conversations or new conversation state needs to be
+  // processed
   useEffect(() => {
-    updateConversations((prev) => [...prev])
-  }, [activeConversation, updateConversations]);
+    setConversations(wasReadHelper(unprocessedConvos));
+  }, [activeConversation, unprocessedConvos, wasReadHelper]);
  
   const handleLogout = async () => {
     if (user && user.id) {
