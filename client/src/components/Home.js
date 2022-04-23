@@ -56,6 +56,7 @@ const Home = ({ user, logout }) => {
   };
 
   const saveWasRead = useCallback(async (otherUsersName, messageId) => {
+    console.log('saveWasRead');
     const { data } = await axios.patch(`/api/messages/${messageId}`, {
       otherUsersName,
       attributes: {
@@ -190,6 +191,7 @@ const Home = ({ user, logout }) => {
 
   const addMessageToConversation = useCallback(
     (data) => {
+      console.log('addMessageToConversation');
       // if sender isn't null, that means the message needs to be put in a brand new convo
       const { message, sender = null } = data;
       if (sender !== null) {
@@ -251,6 +253,7 @@ const Home = ({ user, logout }) => {
   }, [updateConversations]);
 
   const setWasReadLocally = useCallback(({ conversationId, messageId }) => {
+    console.log('setWasReadLocally');
     updateConversations(prev => prev.map(convo => {
       if (convo.id === conversationId) {
         const convoCopy = { ...convo };
@@ -313,8 +316,15 @@ const Home = ({ user, logout }) => {
     if (!user.isFetching) {
       fetchConversations();
     }
-  }, [user, updateConversations]);
+  // adding updateConversations as a dependency caused extraneous fetches
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
+  // Update read status when the user switches conversations
+  useEffect(() => {
+    updateConversations((prev) => [...prev])
+  }, [activeConversation, updateConversations]);
+ 
   const handleLogout = async () => {
     if (user && user.id) {
       await logout(user.id);

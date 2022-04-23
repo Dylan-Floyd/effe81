@@ -98,7 +98,6 @@ router.patch('/:messageId', async (req, res, next) => {
     message.wasRead = true;
     await message.save();
 
-    
     if(onlineUsers.isUserOnline(otherUser.id)) {
       const socket = onlineUsers.getSocketById(otherUser.id);
       onlineUsers.emitEventToUser(otherUser.id, "was-read", {
