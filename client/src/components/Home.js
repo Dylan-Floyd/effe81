@@ -19,7 +19,6 @@ const Home = ({ user, logout }) => {
 
   const socket = useContext(SocketContext);
 
-  const [unprocessedConvos, setUnprocessedConvos] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
 
@@ -56,12 +55,10 @@ const Home = ({ user, logout }) => {
     return data;
   };
 
-  const saveWasRead = useCallback(async (otherUsersName, messageId) => {
-    console.log('saveWasRead');
-    const { data } = await axios.patch(`/api/messages/${messageId}`, {
-      otherUsersName,
+  const saveConversationAsRead = useCallback(async (conversationId) => {
+    const { data } = await axios.patch(`/api/conversations/${conversationId}`, {
       attributes: {
-        wasRead: true
+        unreadCount: 0
       }
     });
     return data;
@@ -91,75 +88,9 @@ const Home = ({ user, logout }) => {
     }
   };
 
-  /**
-   * Updates the isLatestRead properties on a single users messages and counts
-   * how many unread messages there are.
-   */
-  const processWasRead = useCallback((messages) => {
-    let unreadCount = messages.length;
-    for(let i = 0; i < messages.length; i++) {
-      if(messages[i].wasRead) {
-        unreadCount--;
-        if (i + 1 === messages.length || !messages[i + 1].wasRead) {
-          messages[i].isLatestRead = true;
-          break;
-        } else {
-          // clear any previously set isLatestRead values
-          messages[i].isLatestRead = false;
-        }
-      }
-    }
-    return unreadCount;
-  }, []);
-
-  const setAllToRead = useCallback((messages, otherUsersName) => {
-    messages.forEach((message, i) => {
-      if(!message.wasRead) {
-        saveWasRead(otherUsersName, message.id);
-        message.wasRead = true;
-      }
-      if(i === message.length - 1) {
-        message.isLatestRead = true;
-      } else {
-        // clear any isLatestRead values that were previously set
-        message.isLatestRead = false;
-      }
-    })
-  }, [saveWasRead]);
-
-  /**
-   * Handles everything related to read status data. It will calculate unread counts,
-   * set a 'isLatestRead: true' property on the appropriate messages, and updates wasRead
-   * on the backend if needed.
-   */
-  const wasReadHelper = useCallback((convos) => {
-    if(!user?.id) return;
-
-    return convos.map(convo => {
-      const messages = convo.messages;
-      const othersMessages = [];
-      const usersMessages = [];
-      messages.forEach(message => {
-        if(message.senderId === user.id) {
-          usersMessages.push(message);
-        } else {
-          othersMessages.push(message);
-        }
-      });
-      if(convo.otherUser.username === activeConversation) {
-        setAllToRead(othersMessages, activeConversation);
-        convo.unreadCount = 0;
-      } else {
-        convo.unreadCount = processWasRead(othersMessages);
-      }
-      processWasRead(usersMessages);
-      return convo;
-    });
-  }, [activeConversation, setAllToRead, processWasRead, user?.id]);;
-
   const addNewConvo = useCallback(
     (recipientId, message) => {
-      setUnprocessedConvos((prevConvos) =>
+      setConversations((prevConvos) =>
         prevConvos.map((convo) => {
           if (convo.otherUser.id === recipientId) {
             return {
@@ -178,7 +109,6 @@ const Home = ({ user, logout }) => {
 
   const addMessageToConversation = useCallback(
     (data) => {
-      console.log('addMessageToConversation');
       // if sender isn't null, that means the message needs to be put in a brand new convo
       const { message, sender = null } = data;
       if (sender !== null) {
@@ -188,31 +118,55 @@ const Home = ({ user, logout }) => {
           messages: [message],
         };
         newConvo.latestMessage = message;
-        setUnprocessedConvos((prev) => [newConvo, ...prev]);
-      }
-
-      setUnprocessedConvos((prevConvos) =>
-        prevConvos.map((convo) => {
-          if (convo.id === message.conversationId) {
-            return {
-              ...convo,
-              messages: [...convo.messages, message],
-              latestMessage: message
+        newConvo.unreadCount = 1;
+        setConversations((prev) => [newConvo, ...prev]);
+      } else {
+        setConversations((prevConvos) =>
+          prevConvos.map((convo) => {
+            if (convo.id === message.conversationId) {
+              let unreadCount = convo.unreadCount;
+              if(message.senderId !== user.id) {
+                if(convo.otherUser.username === activeConversation) {
+                  // If this request fails, it'll get sent again the next time the user gets the convos
+                  // from the backend, so it doesn't need error handling or an await.
+                  saveConversationAsRead(convo.id);
+                } else {
+                  unreadCount = convo.unreadCount + 1;
+                }
+              }
+              return {
+                ...convo,
+                messages: [...convo.messages, message],
+                latestMessage: message,
+                unreadCount
+              }
             }
-          }
-          return convo;
-        })
-      );
+            return convo;
+          })
+        );
+      }
     },
-    []
+    [activeConversation, user?.id, saveConversationAsRead]
   );
 
   const setActiveChat = (username) => {
+    setConversations(convos => convos.map(convo => {
+      if(convo.otherUser.username === username && convo.unreadCount !== 0) {
+        // If this request fails, it'll get sent again the next time the user gets the convos
+        // from the backend, so it doesn't need error handling or an await.
+        saveConversationAsRead(convo.id);
+        return {
+          ...convo,
+          unreadCount: 0
+        }
+      }
+      return convo;
+    }));
     setActiveConversation(username);
   };
 
   const addOnlineUser = useCallback((id) => {
-    setUnprocessedConvos((prev) =>
+    setConversations((prev) =>
       prev.map((convo) => {
         if (convo.otherUser.id === id) {
           const convoCopy = { ...convo };
@@ -226,7 +180,7 @@ const Home = ({ user, logout }) => {
   }, []);
 
   const removeOfflineUser = useCallback((id) => {
-    setUnprocessedConvos((prev) =>
+    setConversations((prev) =>
       prev.map((convo) => {
         if (convo.otherUser.id === id) {
           const convoCopy = { ...convo };
@@ -239,21 +193,13 @@ const Home = ({ user, logout }) => {
     );
   }, []);
 
-  const setWasReadLocally = useCallback(({ conversationId, messageId }) => {
-    console.log('setWasReadLocally');
-    setUnprocessedConvos(prev => prev.map(convo => {
+  const setOthersLatestReadLocally = useCallback(({ conversationId, message }) => {
+    setConversations(prev => prev.map(convo => {
       if (convo.id === conversationId) {
-        const convoCopy = { ...convo };
-        convoCopy.messages = convoCopy.messages.map(message => {
-          if(String(message.id) === String(messageId)) {
-            return {
-              ...message,
-              wasRead: true
-            }
-          }
-          return message
-        });
-        return convoCopy;
+        return { 
+          ...convo,
+          othersLatestReadMessage: message
+        };
       }
       return convo;
     }));
@@ -266,7 +212,7 @@ const Home = ({ user, logout }) => {
     socket.on('add-online-user', addOnlineUser);
     socket.on('remove-offline-user', removeOfflineUser);
     socket.on('new-message', addMessageToConversation);
-    socket.on('was-read', setWasReadLocally);
+    socket.on('latest-read', setOthersLatestReadLocally);
 
     return () => {
       // before the component is destroyed
@@ -274,9 +220,9 @@ const Home = ({ user, logout }) => {
       socket.off('add-online-user', addOnlineUser);
       socket.off('remove-offline-user', removeOfflineUser);
       socket.off('new-message', addMessageToConversation);
-      socket.off('was-read', setWasReadLocally);
+      socket.off('latest-read', setOthersLatestReadLocally);
     };
-  }, [addMessageToConversation, addOnlineUser, removeOfflineUser, setWasReadLocally, socket]);
+  }, [addMessageToConversation, addOnlineUser, removeOfflineUser, setOthersLatestReadLocally, socket]);
 
   useEffect(() => {
     // when fetching, prevent redirect
@@ -295,7 +241,7 @@ const Home = ({ user, logout }) => {
     const fetchConversations = async () => {
       try {
         const { data } = await axios.get('/api/conversations');
-        setUnprocessedConvos(data);
+        setConversations(data);
       } catch (error) {
         console.error(error);
       }
@@ -306,12 +252,6 @@ const Home = ({ user, logout }) => {
   // adding updateConversations as a dependency caused extraneous fetches
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
-  // Update read status when the user switches conversations or new conversation state needs to be
-  // processed
-  useEffect(() => {
-    setConversations(wasReadHelper(unprocessedConvos));
-  }, [activeConversation, unprocessedConvos, wasReadHelper]);
  
   const handleLogout = async () => {
     if (user && user.id) {

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Typography } from "@material-ui/core";
+import { Badge, Box, Typography } from "@material-ui/core";
 import { makeStyles } from "@material-ui/core/styles";
 
 const useStyles = makeStyles((theme) => ({
@@ -31,15 +31,6 @@ const useStyles = makeStyles((theme) => ({
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center'
-  },
-  countBubble: {
-    borderRadius: '1000px',
-    backgroundColor: '#3A8DFF',
-    color: 'white',
-    padding: '3px 10px',
-    flexGrow: 1,
-    minWidth: '25px',
-    textAlign: 'center'
   }
 }));
 
@@ -61,11 +52,12 @@ const ChatContent = ({ conversation }) => {
         </Typography>
       </Box>
       <Box className={classes.countContainer}>
-        {!!conversation.unreadCount && (
-          <Box className={classes.countBubble}>
-            {conversation.unreadCount}
-          </Box>
-        )}
+        <Badge
+          badgeContent={conversation.unreadCount}
+          color={'primary'}
+        >
+          <div />
+        </Badge>
       </Box>
     </Box>
   );
