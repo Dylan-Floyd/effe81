@@ -62,6 +62,13 @@ router.get("/", async (req, res, next) => {
       }
     }
 
+    // put the most recent conversations at the start of the array
+    conversations.sort((a, b) => {
+      const aDate = new Date(a.messages[a.messages.length - 1].createdAt);
+      const bDate = new Date(b.messages[b.messages.length - 1].createdAt);
+      return bDate - aDate;
+    });
+
     res.json(conversations);
   } catch (error) {
     next(error);
