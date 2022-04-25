@@ -21,7 +21,7 @@ router.get("/", async (req, res, next) => {
       attributes: ["id"],
       order: [[Message, "createdAt", "ASC"]],
       include: [
-        { model: Message, order: ["createdAt", "ASC"] },
+        { model: Message },
         {
           model: User,
           as: "user1",
@@ -71,6 +71,13 @@ router.get("/", async (req, res, next) => {
       convoJSON.latestMessageText = convoJSON.messages[convoJSON.messages.length - 1].text;
       conversations[i] = convoJSON;
     }
+
+    // put the most recent conversations at the start of the array
+    conversations.sort((a, b) => {
+      const aDate = new Date(a.messages[a.messages.length - 1].createdAt);
+      const bDate = new Date(b.messages[b.messages.length - 1].createdAt);
+      return bDate - aDate;
+    });
 
     res.json(conversations);
   } catch (error) {
