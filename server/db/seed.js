@@ -1,6 +1,5 @@
 const db = require("./db");
-const { User } = require("./models");
-const Conversation = require("./models/conversation");
+const { User, Conversation, UserConversation } = require("./models");
 const Message = require("./models/message");
 
 async function seed() {
@@ -23,10 +22,9 @@ async function seed() {
       "https://res.cloudinary.com/dmlvthmqr/image/upload/v1607914466/messenger/775db5e79c5294846949f1f55059b53317f51e30_s3back.png",
   });
 
-  const santaigoConvo = await Conversation.create({
-    user1Id: thomas.id,
-    user2Id: santiago.id,
-  });
+  const santaigoConvo = await Conversation.create();
+  santaigoConvo.addUser(santiago, { through: UserConversation })
+  santaigoConvo.addUser(thomas, { through: UserConversation });
 
   await Message.create({
     conversationId: santaigoConvo.id,
