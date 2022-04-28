@@ -56,11 +56,7 @@ const Home = ({ user, logout }) => {
   };
 
   const saveConversationAsRead = useCallback(async (conversationId) => {
-    const { data } = await axios.patch(`/api/conversations/${conversationId}`, {
-      attributes: {
-        unreadCount: 0
-      }
-    });
+    const { data } = await axios.patch(`/api/conversations/${conversationId}`);
     return data;
   }, []);
 
