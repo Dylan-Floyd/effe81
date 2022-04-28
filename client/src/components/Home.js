@@ -37,11 +37,12 @@ const Home = ({ user, logout }) => {
     users.forEach((user) => {
       // only create a fake convo if we don't already have a convo with this user
       if (!currentUsers[user.id]) {
-        let fakeConvo = { otherUser: user, messages: [] };
+        let fakeConvo = { otherUser: user, messages: [], unreadCount: 0 };
         newState.push(fakeConvo);
       }
     });
 
+    // There's no wasRead data so we can use setConversations here.
     setConversations(newState);
   };
 
@@ -53,6 +54,11 @@ const Home = ({ user, logout }) => {
     const { data } = await axios.post('/api/messages', body);
     return data;
   };
+
+  const saveConversationAsRead = useCallback(async (conversationId) => {
+    const { data } = await axios.patch(`/api/conversations/${conversationId}`);
+    return data;
+  }, []);
 
   const sendMessage = (data, body) => {
     socket.emit('new-message', {
@@ -94,7 +100,7 @@ const Home = ({ user, logout }) => {
         })
       );
     },
-    [setConversations]
+    []
   );
 
   const addMessageToConversation = useCallback(
@@ -107,27 +113,51 @@ const Home = ({ user, logout }) => {
           otherUser: sender,
           messages: [message],
         };
-        newConvo.latestMessageText = message.text;
+        newConvo.latestMessage = message;
+        newConvo.unreadCount = 1;
         setConversations((prev) => [newConvo, ...prev]);
-      }
-
-      setConversations((prevConvos) =>
-        prevConvos.map((convo) => {
-          if (convo.id === message.conversationId) {
-            return {
-              ...convo,
-              messages: [...convo.messages, message],
-              latestMessageText: message.text
+      } else {
+        setConversations((prevConvos) =>
+          prevConvos.map((convo) => {
+            if (convo.id === message.conversationId) {
+              let unreadCount = convo.unreadCount;
+              if(message.senderId !== user.id) {
+                if(convo.otherUser.username === activeConversation) {
+                  // If this request fails, it'll get sent again the next time the user gets the convos
+                  // from the backend, so it doesn't need error handling or an await.
+                  saveConversationAsRead(convo.id);
+                } else {
+                  unreadCount = convo.unreadCount + 1;
+                }
+              }
+              return {
+                ...convo,
+                messages: [...convo.messages, message],
+                latestMessage: message,
+                unreadCount
+              }
             }
-          }
-          return convo;
-        })
-      );
+            return convo;
+          })
+        );
+      }
     },
-    [setConversations]
+    [activeConversation, user?.id, saveConversationAsRead]
   );
 
   const setActiveChat = (username) => {
+    setConversations(convos => convos.map(convo => {
+      if(convo.otherUser.username === username && convo.unreadCount !== 0) {
+        // If this request fails, it'll get sent again the next time the user gets the convos
+        // from the backend, so it doesn't need error handling or an await.
+        saveConversationAsRead(convo.id);
+        return {
+          ...convo,
+          unreadCount: 0
+        }
+      }
+      return convo;
+    }));
     setActiveConversation(username);
   };
 
@@ -159,6 +189,18 @@ const Home = ({ user, logout }) => {
     );
   }, []);
 
+  const setOthersLatestReadLocally = useCallback(({ conversationId, message }) => {
+    setConversations(prev => prev.map(convo => {
+      if (convo.id === conversationId) {
+        return { 
+          ...convo,
+          othersLatestReadMessage: message
+        };
+      }
+      return convo;
+    }));
+  }, []);
+
   // Lifecycle
 
   useEffect(() => {
@@ -166,6 +208,7 @@ const Home = ({ user, logout }) => {
     socket.on('add-online-user', addOnlineUser);
     socket.on('remove-offline-user', removeOfflineUser);
     socket.on('new-message', addMessageToConversation);
+    socket.on('latest-read', setOthersLatestReadLocally);
 
     return () => {
       // before the component is destroyed
@@ -173,8 +216,9 @@ const Home = ({ user, logout }) => {
       socket.off('add-online-user', addOnlineUser);
       socket.off('remove-offline-user', removeOfflineUser);
       socket.off('new-message', addMessageToConversation);
+      socket.off('latest-read', setOthersLatestReadLocally);
     };
-  }, [addMessageToConversation, addOnlineUser, removeOfflineUser, socket]);
+  }, [addMessageToConversation, addOnlineUser, removeOfflineUser, setOthersLatestReadLocally, socket]);
 
   useEffect(() => {
     // when fetching, prevent redirect
@@ -201,8 +245,10 @@ const Home = ({ user, logout }) => {
     if (!user.isFetching) {
       fetchConversations();
     }
+  // adding updateConversations as a dependency caused extraneous fetches
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
+ 
   const handleLogout = async () => {
     if (user && user.id) {
       await logout(user.id);
@@ -219,6 +265,7 @@ const Home = ({ user, logout }) => {
           user={user}
           clearSearchedUsers={clearSearchedUsers}
           addSearchedUsers={addSearchedUsers}
+          activeChat={activeConversation}
           setActiveChat={setActiveChat}
         />
         <ActiveChat

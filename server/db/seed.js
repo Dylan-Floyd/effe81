@@ -44,6 +44,9 @@ async function seed() {
     text: "Share photo of your city, please",
   });
 
+  santaigoConvo.user1LastReadMessageId = 1;
+  await santaigoConvo.save();
+
   const chiumbo = await User.create({
     username: "chiumbo",
     email: "chiumbo@email.com",
@@ -60,6 +63,9 @@ async function seed() {
     senderId: chiumbo.id,
     text: "Sure! What time?",
   });
+
+  chiumboConvo.user1LastReadMessageId = 4;
+  await chiumboConvo.save();
 
   const hualing = await User.create({
     username: "hualing",
